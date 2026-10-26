@@ -68,6 +68,31 @@
   .meta { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
   .meta b { color: var(--text); font-weight: 600; }
 
+  /* P&L */
+  .quick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .quick button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 12px; font-size: 0.85rem; cursor: pointer;
+  }
+  .quick button:hover { border-color: var(--accent); color: var(--accent); }
+  .pnl-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .pnl-inputs label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+  .pnl-inputs input, .pnl-inputs select {
+    width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 9px; font-size: 0.95rem; font-variant-numeric: tabular-nums;
+  }
+  table.pnl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.pnl th { text-align: right; font-size: 0.8rem; text-transform: uppercase; letter-spacing: .08em; padding-bottom: 6px; }
+  table.pnl th.c { color: var(--call); }
+  table.pnl th.p { color: var(--put); }
+  table.pnl td { padding: 6px 0; border-top: 1px solid var(--border); font-size: 0.92rem; }
+  table.pnl td:not(:first-child) { text-align: right; font-weight: 600; }
+  table.pnl td small { color: var(--muted); font-size: 0.75rem; margin-left: 4px; }
+  table.pnl tr.sum td { font-weight: 700; border-top-color: var(--muted); }
+  .pos { color: var(--call); }
+  .neg { color: var(--put); }
+  .note { margin: 12px 0 0; font-size: 0.8rem; color: var(--muted); }
+
   /* Chart */
   .chart-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; align-items: center; }
   .chart-controls label { font-size: 0.85rem; color: var(--muted); }
@@ -161,6 +186,41 @@
           <span>N(d2) ≈ prob. call ITM = <b id="m_itm">–</b></span>
           <span>Paridad put-call: <b id="m_parity">–</b></span>
         </div>
+      </div>
+
+      <div class="card" style="margin-top:20px">
+        <h2>Simulador de P&amp;L</h2>
+        <div class="quick">
+          <button data-q="S" data-v="1">+1 subyacente</button>
+          <button data-q="S" data-v="-1">−1 subyacente</button>
+          <button data-q="V" data-v="1">+1 VI</button>
+          <button data-q="V" data-v="-1">−1 VI</button>
+          <button data-q="D" data-v="1">+1 día</button>
+          <button data-q="clear">Limpiar</button>
+        </div>
+        <div class="pnl-inputs">
+          <div><label for="dS">Cambio subyacente</label><input type="number" id="dS" step="0.5" value="1"></div>
+          <div><label for="dV">Cambio VI (pts)</label><input type="number" id="dV" step="0.5" value="0"></div>
+          <div><label for="dD">Días que pasan</label><input type="number" id="dD" step="1" min="0" value="0"></div>
+          <div><label for="pos">Posición</label>
+            <select id="pos"><option value="1">Comprado</option><option value="-1">Vendido</option></select></div>
+          <div><label for="qty">Contratos</label><input type="number" id="qty" step="1" min="1" value="1"></div>
+          <div><label for="mult">Multiplicador</label><input type="number" id="mult" step="1" min="1" value="100"></div>
+        </div>
+        <table class="pnl">
+          <thead><tr><th></th><th class="c">Call</th><th class="p">Put</th></tr></thead>
+          <tbody>
+            <tr><td>Efecto delta <small>Δ·ΔS</small></td><td id="pc_delta"></td><td id="pp_delta"></td></tr>
+            <tr><td>Efecto gamma <small>½·Γ·ΔS²</small></td><td id="pc_gamma"></td><td id="pp_gamma"></td></tr>
+            <tr><td>Efecto vega <small>ν·ΔVI</small></td><td id="pc_vega"></td><td id="pp_vega"></td></tr>
+            <tr><td>Efecto theta <small>Θ·días</small></td><td id="pc_theta"></td><td id="pp_theta"></td></tr>
+            <tr class="sum"><td>P&amp;L estimado con griegas</td><td id="pc_approx"></td><td id="pp_approx"></td></tr>
+            <tr class="sum"><td>P&amp;L real <small>revaluando la opción</small></td><td id="pc_exact"></td><td id="pp_exact"></td></tr>
+            <tr><td>Nuevo precio de la opción</td><td id="pc_new"></td><td id="pp_new"></td></tr>
+            <tr><td>Diferencia <small>efectos de orden superior</small></td><td id="pc_diff"></td><td id="pp_diff"></td></tr>
+          </tbody>
+        </table>
+        <p class="note">Importes por posición total (precio × contratos × multiplicador). La diferencia entre la estimación con griegas y el P&amp;L real crece con movimientos grandes, porque las griegas también cambian al moverse el mercado.</p>
       </div>
 
       <div class="card" style="margin-top:20px">
@@ -307,8 +367,67 @@ function render() {
   const rhs = v.S * Math.exp(-v.Q / 100 * res.T) - v.K * Math.exp(-v.R / 100 * res.T);
   $('m_parity').textContent = Math.abs(lhs - rhs) < 1e-6 ? 'se cumple ✓' : 'revisar';
 
+  updatePnl(v, res);
   updateChart(v);
 }
+
+/* =========================================================
+   SIMULADOR DE P&L
+   ========================================================= */
+function num(id, def = 0) { const x = parseFloat($(id).value); return isFinite(x) ? x : def; }
+
+function setPnl(id, x) {
+  const el = $(id);
+  x = Math.round(x * 100) / 100 || 0; // evita mostrar "-0,00"
+  el.textContent = (x > 0 ? '+' : '') + fmt(x, 2);
+  el.className = x > 1e-9 ? 'pos' : (x < -1e-9 ? 'neg' : '');
+}
+
+function updatePnl(v, res) {
+  const dS = num('dS'), dV = num('dV'), dD = Math.max(0, num('dD'));
+  const size = num('pos', 1) * Math.max(1, num('qty', 1)) * Math.max(1, num('mult', 100));
+
+  // Revaluación completa con los nuevos parámetros
+  const S2 = Math.max(0.01, v.S + dS);
+  const V2 = Math.max(0.01, v.V + dV);
+  const D2 = Math.max(0, v.D - dD);
+  const res2 = bsm(S2, v.K, D2, V2 / 100, v.R / 100, v.Q / 100);
+
+  ['call', 'put'].forEach(side => {
+    const p = side === 'call' ? 'pc_' : 'pp_';
+    const o = res[side];
+    const eDelta = o.delta * dS * size;
+    const eGamma = 0.5 * o.gamma * dS * dS * size;
+    const eVega  = o.vega * dV * size;
+    const eTheta = o.theta * dD * size;
+    const approx = eDelta + eGamma + eVega + eTheta;
+    const exact  = (res2[side].price - o.price) * size;
+
+    setPnl(p + 'delta', eDelta);
+    setPnl(p + 'gamma', eGamma);
+    setPnl(p + 'vega', eVega);
+    setPnl(p + 'theta', eTheta);
+    setPnl(p + 'approx', approx);
+    setPnl(p + 'exact', exact);
+    setPnl(p + 'diff', exact - approx);
+    $(p + 'new').textContent = fmt(res2[side].price, 2);
+    $(p + 'new').className = '';
+  });
+}
+
+['dS', 'dV', 'dD', 'pos', 'qty', 'mult'].forEach(id => $(id).addEventListener('input', render));
+
+document.querySelectorAll('.quick button').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.q === 'clear') {
+    $('dS').value = 0; $('dV').value = 0; $('dD').value = 0;
+  } else {
+    // Cada botón muestra el efecto aislado de ese movimiento
+    $('dS').value = 0; $('dV').value = 0; $('dD').value = 0;
+    const target = { S: 'dS', V: 'dV', D: 'dD' }[b.dataset.q];
+    $(target).value = b.dataset.v;
+  }
+  render();
+}));
 
 /* Sincronización slider ↔ número */
 ids.forEach(k => {
@@ -358,7 +477,8 @@ const currentLine = {
   }
 };
 
-const chart = new Chart($('chart'), {
+// Si la librería de gráficos no carga (sin conexión), la calculadora sigue funcionando
+const chart = typeof Chart === 'undefined' ? null : new Chart($('chart'), {
   type: 'line',
   data: { datasets: [
     { label: 'Call', data: [], borderColor: C_CALL, backgroundColor: C_CALL, borderWidth: 2, pointRadius: 0, tension: 0 },
@@ -388,6 +508,7 @@ const G_LABELS = { price: 'Precio de la opción', delta: 'Delta', gamma: 'Gamma'
 const xLabel = () => X_LABELS[$('x_sel').value];
 
 function updateChart(v) {
+  if (!chart) return;
   const g = $('g_sel').value, xv = $('x_sel').value;
   let lo, hi;
   if (xv === 'S') { lo = Math.max(0.01, v.K * 0.5); hi = v.K * 1.5; }
