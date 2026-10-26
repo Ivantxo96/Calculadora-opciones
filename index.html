@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora de Griegas</title>
+<meta name="description" content="Calculadora de precio y griegas de opciones europeas con el modelo Black-Scholes-Merton.">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #000000;
+    --panel: #0d0d0d;
+    --panel-2: #151515;
+    --border: #2a2a2a;
+    --text: #ececec;
+    --muted: #9a9a9a;
+    --call: #5DCAA5;
+    --call-fill: #085041;
+    --put: #F0997B;
+    --put-fill: #712B13;
+    --accent: #AFA9EC;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
+  header h1 { margin: 0 0 4px; font-size: 1.9rem; letter-spacing: -0.02em; }
+  header p { margin: 0 0 28px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 20px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .card h2 { margin: 0 0 16px; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+
+  /* Inputs */
+  .field { margin-bottom: 16px; }
+  .field label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 6px; }
+  .field label span.hint { color: var(--muted); font-size: 0.8rem; }
+  .field .row { display: flex; gap: 10px; align-items: center; }
+  .field input[type=number] {
+    width: 96px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 9px; font-size: 0.95rem; font-variant-numeric: tabular-nums;
+  }
+  .field input[type=number]:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  .field input[type=range] { flex: 1; accent-color: var(--call); }
+  .btn {
+    width: 100%; background: transparent; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px; cursor: pointer; font-size: 0.85rem;
+  }
+  .btn:hover { color: var(--text); border-color: var(--muted); }
+
+  /* Results */
+  .results { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 520px) { .results { grid-template-columns: 1fr; } }
+  .opt { border-radius: 10px; padding: 16px; border: 1px solid; }
+  .opt.call { border-color: var(--call); background: linear-gradient(180deg, rgba(8,80,65,.35), transparent); }
+  .opt.put  { border-color: var(--put);  background: linear-gradient(180deg, rgba(113,43,19,.35), transparent); }
+  .opt h3 { margin: 0 0 4px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: .08em; }
+  .opt.call h3 { color: var(--call); }
+  .opt.put h3 { color: var(--put); }
+  .price { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: 10px; }
+  table.greeks { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.greeks td { padding: 6px 0; border-top: 1px solid var(--border); font-size: 0.93rem; }
+  table.greeks td:last-child { text-align: right; font-weight: 600; }
+  table.greeks td small { color: var(--muted); font-size: 0.75rem; }
+  .meta { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .meta b { color: var(--text); font-weight: 600; }
+
+  /* Chart */
+  .chart-controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; align-items: center; }
+  .chart-controls label { font-size: 0.85rem; color: var(--muted); }
+  select {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px; font-size: 0.9rem;
+  }
+  .chart-box { position: relative; height: 340px; }
+
+  /* Explanations */
+  .explain { margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .explain .item { background: var(--panel-2); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 14px; font-size: 0.88rem; }
+  .explain .item strong { display: block; margin-bottom: 4px; color: var(--text); }
+  .explain .item p { margin: 0; color: var(--muted); }
+  .formula { margin-top: 20px; font-size: 0.85rem; color: var(--muted); }
+  .formula code { color: var(--text); background: var(--panel-2); padding: 2px 6px; border-radius: 4px; }
+  footer { margin-top: 32px; font-size: 0.78rem; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Calculadora de Griegas</h1>
+    <p>Precio teórico y sensibilidades de opciones europeas con el modelo Black-Scholes-Merton.</p>
+  </header>
+
+  <div class="grid">
+    <!-- ENTRADAS -->
+    <section class="card">
+      <h2>Parámetros</h2>
+
+      <div class="field">
+        <label for="S">Precio del subyacente (S)</label>
+        <div class="row"><input type="range" id="S_r" min="1" max="500" step="0.5"><input type="number" id="S" step="0.01" min="0.01"></div>
+      </div>
+      <div class="field">
+        <label for="K">Precio de ejercicio / strike (K)</label>
+        <div class="row"><input type="range" id="K_r" min="1" max="500" step="0.5"><input type="number" id="K" step="0.01" min="0.01"></div>
+      </div>
+      <div class="field">
+        <label for="D">Días al vencimiento <span class="hint">naturales</span></label>
+        <div class="row"><input type="range" id="D_r" min="1" max="730" step="1"><input type="number" id="D" step="1" min="0"></div>
+      </div>
+      <div class="field">
+        <label for="V">Volatilidad implícita <span class="hint">% anual</span></label>
+        <div class="row"><input type="range" id="V_r" min="1" max="150" step="0.5"><input type="number" id="V" step="0.1" min="0.01"></div>
+      </div>
+      <div class="field">
+        <label for="R">Tipo de interés libre de riesgo <span class="hint">% anual</span></label>
+        <div class="row"><input type="range" id="R_r" min="-2" max="15" step="0.05"><input type="number" id="R" step="0.01"></div>
+      </div>
+      <div class="field">
+        <label for="Q">Rentabilidad por dividendo <span class="hint">% anual</span></label>
+        <div class="row"><input type="range" id="Q_r" min="0" max="15" step="0.05"><input type="number" id="Q" step="0.01" min="0"></div>
+      </div>
+
+      <button class="btn" id="reset">Restablecer valores</button>
+    </section>
+
+    <!-- RESULTADOS -->
+    <section>
+      <div class="card">
+        <h2>Resultados</h2>
+        <div class="results">
+          <div class="opt call">
+            <h3>Call</h3>
+            <div class="price" id="c_price">–</div>
+            <table class="greeks">
+              <tr><td>Delta</td><td id="c_delta">–</td></tr>
+              <tr><td>Gamma</td><td id="c_gamma">–</td></tr>
+              <tr><td>Vega <small>por 1 pt de vol.</small></td><td id="c_vega">–</td></tr>
+              <tr><td>Theta <small>por día</small></td><td id="c_theta">–</td></tr>
+              <tr><td>Rho <small>por 1 pt de tipo</small></td><td id="c_rho">–</td></tr>
+            </table>
+          </div>
+          <div class="opt put">
+            <h3>Put</h3>
+            <div class="price" id="p_price">–</div>
+            <table class="greeks">
+              <tr><td>Delta</td><td id="p_delta">–</td></tr>
+              <tr><td>Gamma</td><td id="p_gamma">–</td></tr>
+              <tr><td>Vega <small>por 1 pt de vol.</small></td><td id="p_vega">–</td></tr>
+              <tr><td>Theta <small>por día</small></td><td id="p_theta">–</td></tr>
+              <tr><td>Rho <small>por 1 pt de tipo</small></td><td id="p_rho">–</td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="meta">
+          <span>d1 = <b id="m_d1">–</b></span>
+          <span>d2 = <b id="m_d2">–</b></span>
+          <span>N(d2) ≈ prob. call ITM = <b id="m_itm">–</b></span>
+          <span>Paridad put-call: <b id="m_parity">–</b></span>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:20px">
+        <h2>Gráfico</h2>
+        <div class="chart-controls">
+          <label for="g_sel">Mostrar</label>
+          <select id="g_sel">
+            <option value="price">Precio</option>
+            <option value="delta" selected>Delta</option>
+            <option value="gamma">Gamma</option>
+            <option value="vega">Vega</option>
+            <option value="theta">Theta</option>
+            <option value="rho">Rho</option>
+          </select>
+          <label for="x_sel">frente a</label>
+          <select id="x_sel">
+            <option value="S" selected>Precio del subyacente</option>
+            <option value="D">Días al vencimiento</option>
+            <option value="V">Volatilidad implícita</option>
+          </select>
+        </div>
+        <div class="chart-box"><canvas id="chart"></canvas></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="explain">
+    <div class="item"><strong>Delta (Δ)</strong><p>Cuánto cambia el precio de la opción si el subyacente sube 1. También se usa como cobertura: nº de acciones equivalentes por opción.</p></div>
+    <div class="item"><strong>Gamma (Γ)</strong><p>Cuánto cambia la delta si el subyacente sube 1. Máxima cerca del dinero y al acercarse el vencimiento.</p></div>
+    <div class="item"><strong>Vega (ν)</strong><p>Cuánto cambia el precio de la opción si la volatilidad implícita sube 1 punto porcentual (p. ej. de 20% a 21%).</p></div>
+    <div class="item"><strong>Theta (Θ)</strong><p>Cuánto cambia el precio de la opción al pasar un día natural, con todo lo demás constante. Es el coste (o ingreso) del paso del tiempo.</p></div>
+    <div class="item"><strong>Rho (ρ)</strong><p>Cuánto cambia el precio de la opción si el tipo de interés sube 1 punto porcentual.</p></div>
+  </div>
+
+  <div class="formula">
+    Modelo: <code>d1 = [ln(S/K) + (r − q + σ²/2)·T] / (σ·√T)</code>, <code>d2 = d1 − σ·√T</code>,
+    <code>Call = S·e<sup>−qT</sup>·N(d1) − K·e<sup>−rT</sup>·N(d2)</code>,
+    <code>Put = K·e<sup>−rT</sup>·N(−d2) − S·e<sup>−qT</sup>·N(−d1)</code>.
+    T = días / 365. Opciones europeas; el dividendo se modela como rentabilidad continua q.
+  </div>
+
+  <footer>Herramienta educativa. Los valores son teóricos y no constituyen recomendación de inversión.</footer>
+</div>
+
+<script>
+/* =========================================================
+   MOTOR BLACK-SCHOLES-MERTON
+   ========================================================= */
+
+// Densidad normal estándar
+function npdf(x) { return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI); }
+
+// Distribución normal acumulada (Abramowitz & Stegun 26.2.17, error < 7.5e-8)
+function ncdf(x) {
+  const b1 = 0.319381530, b2 = -0.356563782, b3 = 1.781477937,
+        b4 = -1.821255978, b5 = 1.330274429, p = 0.2316419;
+  const ax = Math.abs(x);
+  const t = 1 / (1 + p * ax);
+  const poly = t * (b1 + t * (b2 + t * (b3 + t * (b4 + t * b5))));
+  const cdf = 1 - npdf(ax) * poly;
+  return x >= 0 ? cdf : 1 - cdf;
+}
+
+/**
+ * Calcula precio y griegas de call y put.
+ * S, K: precios | days: días naturales | vol, r, q: decimales (0.20 = 20%)
+ * Vega y Rho por 1 punto porcentual; Theta por día natural.
+ */
+function bsm(S, K, days, vol, r, q) {
+  const T = Math.max(days, 1e-6) / 365;
+  const sig = Math.max(vol, 1e-6);
+  const sqT = Math.sqrt(T);
+  const d1 = (Math.log(S / K) + (r - q + 0.5 * sig * sig) * T) / (sig * sqT);
+  const d2 = d1 - sig * sqT;
+  const dfq = Math.exp(-q * T), dfr = Math.exp(-r * T);
+  const Nd1 = ncdf(d1), Nd2 = ncdf(d2), nd1 = npdf(d1);
+
+  const callPrice = S * dfq * Nd1 - K * dfr * Nd2;
+  const putPrice  = K * dfr * ncdf(-d2) - S * dfq * ncdf(-d1);
+
+  const gamma = dfq * nd1 / (S * sig * sqT);
+  const vega  = S * dfq * nd1 * sqT / 100;
+  const thetaCommon = -S * dfq * nd1 * sig / (2 * sqT);
+
+  return {
+    d1, d2, T,
+    call: {
+      price: callPrice,
+      delta: dfq * Nd1,
+      gamma, vega,
+      theta: (thetaCommon - r * K * dfr * Nd2 + q * S * dfq * Nd1) / 365,
+      rho: K * T * dfr * Nd2 / 100
+    },
+    put: {
+      price: putPrice,
+      delta: dfq * (Nd1 - 1),
+      gamma, vega,
+      theta: (thetaCommon + r * K * dfr * ncdf(-d2) - q * S * dfq * ncdf(-d1)) / 365,
+      rho: -K * T * dfr * ncdf(-d2) / 100
+    }
+  };
+}
+
+/* =========================================================
+   INTERFAZ
+   ========================================================= */
+const DEFAULTS = { S: 100, K: 100, D: 30, V: 20, R: 4, Q: 0 };
+const ids = Object.keys(DEFAULTS);
+const $ = id => document.getElementById(id);
+
+function readInputs() {
+  const v = {};
+  ids.forEach(k => { v[k] = parseFloat($(k).value); });
+  return v;
+}
+
+function valid(v) {
+  return v.S > 0 && v.K > 0 && v.D >= 0 && v.V > 0 && isFinite(v.R) && isFinite(v.Q);
+}
+
+const fmt = (x, d = 4) => isFinite(x) ? x.toLocaleString('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d }) : '–';
+
+function render() {
+  const v = readInputs();
+  if (!valid(v)) return;
+  const res = bsm(v.S, v.K, v.D, v.V / 100, v.R / 100, v.Q / 100);
+
+  ['call', 'put'].forEach(side => {
+    const p = side === 'call' ? 'c' : 'p';
+    const o = res[side];
+    $(p + '_price').textContent = fmt(o.price, 2);
+    $(p + '_delta').textContent = fmt(o.delta);
+    $(p + '_gamma').textContent = fmt(o.gamma);
+    $(p + '_vega').textContent  = fmt(o.vega);
+    $(p + '_theta').textContent = fmt(o.theta);
+    $(p + '_rho').textContent   = fmt(o.rho);
+  });
+
+  $('m_d1').textContent = fmt(res.d1);
+  $('m_d2').textContent = fmt(res.d2);
+  $('m_itm').textContent = fmt(ncdf(res.d2) * 100, 1) + '%';
+  // C − P = S·e^(−qT) − K·e^(−rT)
+  const lhs = res.call.price - res.put.price;
+  const rhs = v.S * Math.exp(-v.Q / 100 * res.T) - v.K * Math.exp(-v.R / 100 * res.T);
+  $('m_parity').textContent = Math.abs(lhs - rhs) < 1e-6 ? 'se cumple ✓' : 'revisar';
+
+  updateChart(v);
+}
+
+/* Sincronización slider ↔ número */
+ids.forEach(k => {
+  const num = $(k), rng = $(k + '_r');
+  num.addEventListener('input', () => {
+    const x = parseFloat(num.value);
+    if (isFinite(x)) {
+      if (x > parseFloat(rng.max)) rng.max = x;
+      rng.value = x;
+    }
+    render();
+  });
+  rng.addEventListener('input', () => { num.value = rng.value; render(); });
+});
+
+function setDefaults() {
+  ids.forEach(k => { $(k).value = DEFAULTS[k]; $(k + '_r').value = DEFAULTS[k]; });
+  render();
+}
+$('reset').addEventListener('click', setDefaults);
+$('g_sel').addEventListener('change', render);
+$('x_sel').addEventListener('change', render);
+
+/* =========================================================
+   GRÁFICO
+   ========================================================= */
+const css = getComputedStyle(document.documentElement);
+const C_CALL = css.getPropertyValue('--call').trim();
+const C_PUT = css.getPropertyValue('--put').trim();
+const C_ACCENT = css.getPropertyValue('--accent').trim();
+
+// Línea vertical que marca el valor actual del eje X
+const currentLine = {
+  id: 'currentLine',
+  afterDatasetsDraw(chart, _args, opts) {
+    if (opts.x == null) return;
+    const xScale = chart.scales.x, yScale = chart.scales.y;
+    const px = xScale.getPixelForValue(opts.x);
+    if (px < xScale.left || px > xScale.right) return;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = C_ACCENT;
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px, yScale.top); ctx.lineTo(px, yScale.bottom); ctx.stroke();
+    ctx.restore();
+  }
+};
+
+const chart = new Chart($('chart'), {
+  type: 'line',
+  data: { datasets: [
+    { label: 'Call', data: [], borderColor: C_CALL, backgroundColor: C_CALL, borderWidth: 2, pointRadius: 0, tension: 0 },
+    { label: 'Put',  data: [], borderColor: C_PUT,  backgroundColor: C_PUT,  borderWidth: 2, pointRadius: 0, tension: 0 }
+  ]},
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      x: { type: 'linear', ticks: { color: '#9a9a9a' }, grid: { color: '#1f1f1f' }, title: { display: true, color: '#9a9a9a' } },
+      y: { ticks: { color: '#9a9a9a' }, grid: { color: '#1f1f1f' }, title: { display: true, color: '#9a9a9a' } }
+    },
+    plugins: {
+      legend: { labels: { color: '#ececec' } },
+      tooltip: { callbacks: {
+        title: items => items.length ? xLabel() + ': ' + fmt(items[0].parsed.x, 2) : '',
+        label: item => item.dataset.label + ': ' + fmt(item.parsed.y)
+      }},
+      currentLine: { x: null }
+    }
+  },
+  plugins: [currentLine]
+});
+
+const X_LABELS = { S: 'Precio del subyacente', D: 'Días al vencimiento', V: 'Volatilidad implícita (%)' };
+const G_LABELS = { price: 'Precio de la opción', delta: 'Delta', gamma: 'Gamma', vega: 'Vega (por 1 pt)', theta: 'Theta (por día)', rho: 'Rho (por 1 pt)' };
+const xLabel = () => X_LABELS[$('x_sel').value];
+
+function updateChart(v) {
+  const g = $('g_sel').value, xv = $('x_sel').value;
+  let lo, hi;
+  if (xv === 'S') { lo = Math.max(0.01, v.K * 0.5); hi = v.K * 1.5; }
+  if (xv === 'D') { lo = 1; hi = Math.max(60, v.D * 2); }
+  if (xv === 'V') { lo = 1; hi = Math.max(80, v.V * 2); }
+
+  const N = 200, callPts = [], putPts = [];
+  for (let i = 0; i <= N; i++) {
+    const x = lo + (hi - lo) * i / N;
+    const p = { ...v, [xv]: x };
+    const r = bsm(p.S, p.K, p.D, p.V / 100, p.R / 100, p.Q / 100);
+    callPts.push({ x, y: r.call[g] });
+    putPts.push({ x, y: r.put[g] });
+  }
+  chart.data.datasets[0].data = callPts;
+  chart.data.datasets[1].data = putPts;
+  // Gamma y vega son iguales para call y put: se muestra una sola línea
+  const same = g === 'gamma' || g === 'vega';
+  chart.data.datasets[0].label = same ? 'Call y Put' : 'Call';
+  chart.data.datasets[1].hidden = same;
+  chart.options.scales.x.min = lo;
+  chart.options.scales.x.max = hi;
+  chart.options.scales.x.title.text = X_LABELS[xv];
+  chart.options.scales.y.title.text = G_LABELS[g];
+  chart.options.plugins.currentLine.x = v[xv];
+  chart.update();
+}
+
+setDefaults();
+</script>
+</body>
+</html>
